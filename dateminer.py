@@ -14,7 +14,6 @@ Python port of John Muellerleile's dateminer Java library:
 
 from lxml import etree
 from datetime import datetime
-import dateutil.parser
 import itertools
 import re
 import sys
@@ -37,12 +36,6 @@ class DateMiner(object):
     months_long = ['january', 'february', 'march', 'april', 'may',
                    'june', 'july', 'august', 'september', 'october',
                    'november', 'december']
-
-    def parse_date(self, datestr):
-        try:
-            return dateutil.parser.parse(datestr)
-        except ValueError:
-            return None
 
     def find_dates_in_text(self, text):
         chunks = text.split(' ')
