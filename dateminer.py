@@ -3,7 +3,7 @@
 dateminer
 ~~~~~~~~~
 
-Python port of John Muellerleile's dateminer Java application:
+Python port of John Muellerleile's dateminer Java library:
 
   https://github.com/jrecursive/date_miner
 
