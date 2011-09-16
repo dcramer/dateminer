@@ -26,3 +26,21 @@ class DateMinerTest(unittest2.TestCase):
         self.assertEquals(date.month, 5)
         self.assertEquals(date.day, 20)
         self.assertEquals(date.year, 2010)
+
+    def test_businessweek_url(self):
+        url = 'http://businessweek.com/news/2010-10-04/germany-steps-up-bonus-curbs-at-commerzbank-hypo-real-estate.html'
+        content = ''
+        tu = DateMiner()
+        date = tu.coerce_dates(url, content)
+        self.assertEquals(date.month, 10)
+        self.assertEquals(date.day, 4)
+        self.assertEquals(date.year, 2010)
+
+    def test_businessweek_content(self):
+        url = 'http://businessweek.com/news/germany-steps-up-bonus-curbs-at-commerzbank-hypo-real-estate.html'
+        content = get_fixture_data('businessweek.html')
+        tu = DateMiner()
+        date = tu.coerce_dates(url, content)
+        self.assertEquals(date.month, 10)
+        self.assertEquals(date.day, 4)
+        self.assertEquals(date.year, 2010)
