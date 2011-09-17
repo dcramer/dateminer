@@ -41,4 +41,4 @@ class DateMinerTest(unittest2.TestCase):
         dateminer = DateMiner()
         results = dateminer.coerce_dates_from_text('http://www.cnn.com/2010/US/05/20/gulf.oil.spill/index.html?hpt=T2')
         self.assertEquals(len(results), 1)
-        self.assertEquals(results[0].date(), datetime.date(year=2010, month=5, day=20))
+        self.assertEquals(results[0], datetime.date(year=2010, month=5, day=20))

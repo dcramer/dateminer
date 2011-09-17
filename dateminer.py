@@ -24,10 +24,9 @@ def guess_date(url, content):
 
     if not results:
         return
-
+    
     grouped_by_date = dict((k, len(list(v))) for k, v in itertools.groupby(results, key=lambda x: x))
 
-    # TODO: if multiple match same count then we should take the newest date
     best = (0, None)
     for dt, matches in grouped_by_date.items():
         if best[0] < matches or (best[0] == matches and dt > best[1]):
@@ -39,9 +38,22 @@ class DateParser(object):
     def __init__(self, miner):
         self.miner = miner
         self.dates = []
+        self.parse = True
+
+    def start(self, tag, attr):
+        if tag in ('style', 'script', 'noscript'):
+            self.parse = False
+
+    def end(self, tag):
+        if tag in ('style', 'script', 'noscript'):
+            self.parse = True
 
     def data(self, data):
-        self.dates.extend(self.miner.coerce_dates_from_text(data.strip()))
+        if self.parse:
+            self.dates.extend(self.miner.coerce_dates_from_text(data.strip()))
+
+    def close(self):
+        return self.dates
 
 class DateMiner(object):
     months_short = ['jan', 'feb', 'mar', 'apr', 'may', 'jun',
@@ -72,10 +84,11 @@ class DateMiner(object):
         cur_chunk = 0
         num_chunks = len(chunks)
         for chunk in chunks:
-            chunk_len = len(chunk)
             chunk = chunk.strip()
             if not chunk:
                 continue
+
+            chunk_len = len(chunk)
             is_num = chunk.isdigit()
 
             if not is_num:
@@ -307,15 +320,12 @@ class DateMiner(object):
         chunks = text.split(' ')
         for chunk in chunks:
             chunk = chunk.strip().lower()
-            is_month_token = False
-            for month in self.months_short:
-                if chunk == month:
-                    is_month_token = True
 
-            if not is_month_token:
+            if not chunk:
+                continue
+
+            if not (chunk in self.months_short or chunk in self.months_long):
                 chunk = self._re_alpha.sub(' ', chunk)
-                if not chunk.strip():
-                    continue
 
             out += chunk + " "
 
@@ -331,8 +341,7 @@ class DateMiner(object):
         dtparser = DateParser(miner=self)
         parser = etree.HTMLParser(target=dtparser)
         parser.feed(content)
-
-        return dtparser.dates
+        return parser.close()
 
     def coerce_dates(self, url, content):
         dates_url = set(self.coerce_dates_from_url(url))
