@@ -27,7 +27,7 @@ class DateMinerTest(unittest2.TestCase):
             base_date = datetime.date(year=date[0], month=date[1], day=date[2])
             
             content = get_fixture_data(fixture_name)
-            
+
             date = guess_date(url, content)
             self.assertDate(date, base_date, url, content)
             

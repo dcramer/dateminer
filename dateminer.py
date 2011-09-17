@@ -18,6 +18,15 @@ import itertools
 import re
 import sys
 
+def guess_date(url, content):
+    dateminer = DateMiner()
+    results = dateminer.coerce_dates(url, content)
+
+    if not results:
+        return
+    
+    return results[0]
+
 class Results(object):
     def __init__(self):
         self.results = []
@@ -32,12 +41,27 @@ class Results(object):
     def __repr__(self):
         return '<%s: results=%s>' % (self.__class__.__name__, self.results)
 
+    def __len__(self):
+        return len(self.results)
+    
+    def __getitem__(self, *args, **kwargs):
+        return self.results.__getitem__(*args, **kwargs)
+    
+    def __getslice__(self, *args, **kwargs):
+        return self.results.__getslice__(*args, **kwargs)
+
     def add(self, guess):
         if not guess.year:
             return
         if guess.year > self.cur_year:
             return
         self.results.append(guess)
+
+    def update(self, results):
+        if isinstance(results, Results):
+            self.results.extend(results.results)
+        else:
+            self.results.extend(results)
 
 class Guess(object):
     def __init__(self, year=None, month=None, day=None):
@@ -55,15 +79,6 @@ class Guess(object):
     @property
     def date(self):
         return date(year=self.year or date.today().year, month=self.month or 1, day=self.day or 1)
-
-def guess_date(url, content):
-    dateminer = DateMiner()
-    results = dateminer.coerce_dates(url, content)
-
-    if not results:
-        return
-    
-    return results[0]
 
 class DateParser(object):
     def __init__(self, miner):
@@ -114,11 +129,8 @@ class DateMiner(object):
                 continue
 
             chunk_len = len(chunk)
-            is_num = chunk.isdigit()
 
-            if not is_num:
-                guess.month = None
-
+            if not chunk.isdigit():
                 if chunk_len == 3:
                     try:
                         guess.month = self.months_short.index(chunk.lower())
@@ -131,7 +143,7 @@ class DateMiner(object):
                     except ValueError:
                         pass
 
-                elif guess.year:
+                elif guess.year and guess.month:
                     results.add(guess)
                     guess = Guess()
 
@@ -308,11 +320,11 @@ class DateMiner(object):
 
         out = out.strip()
 
-        results = set(self.find_dates_in_text(text))
+        results = self.find_dates_in_text(text)
         if out != text:
-            results.update(set(self.find_dates_in_text(out)))
+            results.update(self.find_dates_in_text(out))
 
-        return list(results)
+        return results
 
     def coerce_dates_from_html(self, content):
         dtparser = DateParser(miner=self)
@@ -321,21 +333,8 @@ class DateMiner(object):
         return parser.close()
 
     def coerce_dates(self, url, content):
-        dates_url = set(self.coerce_dates_from_url(url))
-        dates_content = set(self.coerce_dates_from_html(content))
-
-        results = dates_url.intersection(dates_content)
-
-        if len(results) != 1:
-            if dates_url and not dates_content:
-                results.update(dates_url)
-            elif dates_content:
-                results.update(dates_content)
-
-            if not results:
-                results = dates_url.union(dates_content)
-
-        results = list(results)
+        results = self.coerce_dates_from_url(url)
+        results.update(self.coerce_dates_from_html(content))
 
         return results
 
