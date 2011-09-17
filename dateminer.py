@@ -18,6 +18,44 @@ import itertools
 import re
 import sys
 
+class Results(object):
+    def __init__(self):
+        self.results = []
+        self.cur_year = date.today().year
+    
+    def __iter__(self):
+        scored = dict((k, sum(x.score for x in v)) for k, v in itertools.groupby(self.results, key=lambda x: x.date))
+
+        for d, s in sorted(scored.iteritems(), key=lambda x: x[1], reverse=True):
+            yield d
+    
+    def __repr__(self):
+        return '<%s: results=%s>' % (self.__class__.__name__, self.results)
+
+    def add(self, guess):
+        if not guess.year:
+            return
+        if guess.year > self.cur_year:
+            return
+        self.results.append(guess)
+
+class Guess(object):
+    def __init__(self, year=None, month=None, day=None):
+        self.year = year
+        self.month = month
+        self.day = day
+
+    def __repr__(self):
+        return '<%s: date=%s, score=%s>' % (self.__class__.__name__, self.date, self.score)
+    
+    @property
+    def score(self):
+        return sum(map(lambda x: int(bool(x)), [self.year, self.month, self.day]))
+
+    @property
+    def date(self):
+        return date(year=self.year or date.today().year, month=self.month or 1, day=self.day or 1)
+
 def guess_date(url, content):
     dateminer = DateMiner()
     results = dateminer.coerce_dates(url, content)
@@ -25,14 +63,7 @@ def guess_date(url, content):
     if not results:
         return
     
-    grouped_by_date = dict((k, len(list(v))) for k, v in itertools.groupby(results, key=lambda x: x))
-
-    best = (0, None)
-    for dt, matches in grouped_by_date.items():
-        if best[0] < matches or (best[0] == matches and dt > best[1]):
-            best = (matches, dt)
-    
-    return best[1]
+    return results[0]
 
 class DateParser(object):
     def __init__(self, miner):
@@ -65,21 +96,15 @@ class DateMiner(object):
     _re_collapse_chars = re.compile(r'[\/\_\-\?\.\&=,]')
     _re_alpha = re.compile(r'[A-Za-z]+')
     
+    def __init__(self):
+        self.results = []
+        self.cur_year = date.today().year
+
     def find_dates_in_text(self, text):
         chunks = text.split(' ')
 
-        results = []
-
-        dt = date.today()
-
-        cur_year = dt.year
-
-        found_year = False
-        found_month = False
-        found_day = False
-        pos_year = 0
-        pos_month = 0
-        pos_day = 0
+        guess = Guess()
+        results = Results()
 
         cur_chunk = 0
         num_chunks = len(chunks)
@@ -92,37 +117,29 @@ class DateMiner(object):
             is_num = chunk.isdigit()
 
             if not is_num:
-                pos_month = None
+                guess.month = None
+
                 if chunk_len == 3:
                     try:
-                        pos_month = self.months_short.index(chunk.lower())
+                        guess.month = self.months_short.index(chunk.lower())
                     except ValueError:
                         pass
+
                 elif chunk_len > 3:
                     try:
-                        pos_month = self.months_long.index(chunk.lower())
+                        guess.month = self.months_long.index(chunk.lower())
                     except ValueError:
                         pass
-                else:
-                    if found_year:
-                        if not found_day:
-                            pos_day = 1
-                        if not found_month:
-                            pos_month = 1
 
-                        results.append(date(year=pos_year, month=pos_month, day=pos_day))
-
-                    found_year = False
-                    found_month = False
-                    found_day = False
-                    pos_year = 0
-                    pos_month = 0
-                    pos_day = 0
+                elif guess.year:
+                    results.add(guess)
+                    guess = Guess()
 
             else:
-                tval = 0
+                tval = None
                 if chunk_len in (8, 12):
                     tval = self.brute_force_date(chunk, 8)
+
                 elif chunk_len == 6:
                     s6_mmdd = chunk[:4]
                     if int(chunk[4:6]) < 70:
@@ -130,40 +147,31 @@ class DateMiner(object):
                     else:
                         s6_yyyy = "19" + chunk[4:6]
                     tval = self.brute_force_date(s6_mmdd + s6_yyyy, 8)
+
                 elif chunk_len == 4:
                     v1 = int(chunk)
-                    if v1 > 1900 and v1 <= cur_year:
-                        pos_year = v1
-                        found_year = True
+                    if v1 > 1900 and v1 <= self.cur_year:
+                        guess.year = v1
                     else:
-                        if not (found_month or found_day):
+                        if not (guess.month or guess.day):
                             v1 = int(chunk[:2])
                             v2 = int(chunk[2:4])
 
                             # assumes mm, dd first if either would match
                             if (v1 > 0 and v1 <= 12 and v2 > 0 and v2 <= 31):
-                                pos_month = v1
-                                pos_day = v2
-                                found_month = True
-                                found_day = True
+                                guess.month = v1
+                                guess.day = v2
                             elif (v1 > 0 and v1 <= 31 and v2 > 0 and v2 <= 12):
-                                pos_month = v2
-                                pos_day = v1
-                                found_month = True
-                                found_day = True
+                                guess.month = v2
+                                guess.day = v1
                         else:
                             # we thought we found a month, but it turns out to
                             # be something like this: /03/1114/ which usually
                             # [at this state] turns out to be: 11/14/2003
-                            if found_month:
-                                s4_2then4 = chunk + "20" + (pos_month < 10 and "0" or "") + pos_month
+                            if guess.month:
+                                s4_2then4 = chunk + "20" + (guess.month < 10 and "0" or "") + guess.month
                                 tval = self.brute_force_date(s4_2then4, 8)
-                                found_month = False
-                                found_day = False
-                                found_year = False
-                                pos_year = 0
-                                pos_month = 0
-                                pos_day = 0
+                                guess = Guess()
                 elif chunk_len in (1, 2):
                     if chunk_len == 1:
                         chunk = "0" + chunk
@@ -172,42 +180,33 @@ class DateMiner(object):
 
                     # if we have month and day already and it's length 2,
                     # it's probably a shortened year... let's do the 2069 test
-                    if not found_year and (found_month and found_day and chunk_len == 2):
+                    if not guess.year and (guess.month and guess.day and chunk_len == 2):
                         if pos_v < 70:
-                            if pos_v + 2000 <= cur_year:
-                                pos_year = 2000 + pos_v
+                            if pos_v + 2000 <= self.cur_year:
+                                guess.year = 2000 + pos_v
                         else:
-                            pos_year = 1900 + pos_v
-
-                        if pos_year <= cur_year:
-                            found_year = True
-                        else:
-                            pos_year = 0
-                            found_year = False
+                            guess.year = 1900 + pos_v
 
                     # try parsing a month or day
                     # since we don't have both month and day found yet
                     # (reality may differ)
                     else:
                         if pos_v > 0 and pos_v <= 12:
-                            if not found_month:
-                                pos_month = pos_v
-                                found_month = True
+                            if not guess.month:
+                                guess.month = pos_v
                             else:
-                                pos_day = pos_v
-                                found_day = True
-                        elif pos_v > 0 and pos_v <= 31 and not found_day:
-                            pos_day = pos_v
-                            found_day = True
+                                guess.day = pos_v
+                        elif pos_v > 0 and pos_v <= 31 and not guess.day:
+                            guess.day = pos_v
                         else:
                             # since at this point we've found either a month or a day, OR
                             # the value presented at this state is not a candidate for what
                             # CAN be found, IF we've got a year then let's add that as a date
                             # (best guess), and augment with month if we've got that
-                            if found_year:
-                                uc_s2_uk2 = str(pos_year)
-                                if found_month:
-                                    uc_s2_uk2 += (pos_month < 10 and "0" or "") + str(pos_month)
+                            if guess.year:
+                                uc_s2_uk2 = str(guess.year)
+                                if guess.month:
+                                    uc_s2_uk2 += (guess.month < 10 and "0" or "") + str(guess.month)
                                 else:
                                     uc_s2_uk2 += "01" # default month
                                 uc_s2_uk2 += "01" # default day
@@ -217,48 +216,26 @@ class DateMiner(object):
                         tval = self.brute_force_date(chunk, 8)
 
                 if tval:
-                    results.append(tval)
-
-                    found_year = False
-                    found_month = False
-                    found_day = False
-                    pos_year = 0
-                    pos_month = 0
-                    pos_day = 0
-                    tval = 0
-                elif found_year and found_month and found_day:
-                    results.append(date(year=pos_year, month=pos_month, day=pos_day))
-
-                    found_year = False
-                    found_month = False
-                    found_day = False
-                    pos_year = 0
-                    pos_month = 0
-                    pos_day = 0
-                    tval = 0
+                    results.add(tval)
+                    guess = Guess()
+                # elif guess.year:
+                #     results.add(guess)
+                #     guess = Guess()
 
             # last chance
             cur_chunk += 1
-            if found_year and found_month and cur_chunk == num_chunks - 1:
-                if not found_day:
-                    pos_day = 1
-                results.append(date(year=pos_year, month=pos_month, day=pos_day))
+            if guess.year and guess.month and cur_chunk == num_chunks - 1:
+                results.add(guess)
+                guess = Guess()
 
-        if found_year:
-            if not found_day:
-                pos_day = 1
-            if not found_month:
-                pos_month = 1
-            results.append(date(year=pos_year, month=pos_month, day=pos_day))
-
-        # sanity check
-        results = [r for r in results if r.year <= cur_year]
+        if guess.year:
+            results.add(guess)
+            guess = Guess()
 
         return results
 
     def brute_force_date(self, string, valid):
-        rdt = None
-        cur_year = date.today().year
+        guess = None
 
         s1_1_4 = int(string[:4])
         s1_2_2 = int(string[4:6])
@@ -269,16 +246,16 @@ class DateMiner(object):
         s2_3_4 = int(string[4:8])
 
         if (s1_1_4 > 1900 and
-           s1_1_4 < (cur_year + 1) and # yy
+           s1_1_4 < (self.cur_year + 1) and # yy
            s1_2_2 > 0 and
            s1_2_2 <= 12 and # mm
            s1_3_2 > 0 and
            s1_3_2 <= 31): #dd
 
-            rdt = date(year=s1_1_4, month=s1_2_2, day=s1_3_2)
+            guess = Guess(year=s1_1_4, month=s1_2_2, day=s1_3_2)
 
         elif (s2_3_4 > 1900 and
-             s2_3_4 < (cur_year + 1)):
+             s2_3_4 < (self.cur_year + 1)):
              # s2, s2_3_4 -> yy
 
             # dd mm yyyy?
@@ -287,7 +264,7 @@ class DateMiner(object):
                s2_2_2 > 0 and
                s2_2_2 <= 12):
 
-                rdt = date(year=s2_3_4, month=s2_2_2, day=s2_1_2)
+                guess = Guess(year=s2_3_4, month=s2_2_2, day=s2_1_2)
 
             # mm dd yyyy?
             elif (s2_1_2 > 0 and
@@ -295,9 +272,9 @@ class DateMiner(object):
                  s2_2_2 > 0 and
                  s2_2_2 <= 31):
 
-                rdt = date(year=s2_3_4, month=s2_1_2, day=s2_2_2)
+                guess = Guess(year=s2_3_4, month=s2_1_2, day=s2_2_2)
 
-        return rdt
+        return guess
     
     def collapse_chars(self, text):
         return self._re_collapse_chars.sub(' ', text)

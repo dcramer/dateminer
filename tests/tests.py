@@ -39,6 +39,6 @@ class DateMinerTest(unittest2.TestCase):
 
     def test_coerce_dates_from_url(self):
         dateminer = DateMiner()
-        results = dateminer.coerce_dates_from_text('http://www.cnn.com/2010/US/05/20/gulf.oil.spill/index.html?hpt=T2')
-        self.assertEquals(len(results), 1)
+        results = dateminer.coerce_dates_from_url('http://www.cnn.com/2010/US/05/20/gulf.oil.spill/index.html?hpt=T2')
+        self.assertEquals(len(results), 1, results)
         self.assertEquals(results[0], datetime.date(year=2010, month=5, day=20))
