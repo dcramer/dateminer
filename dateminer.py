@@ -50,6 +50,9 @@ class DateMiner(object):
                    'june', 'july', 'august', 'september', 'october',
                    'november', 'december']
 
+    _re_collapse_chars = re.compile(r'[\/\_\-\?\.\&=,]')
+    _re_alpha = re.compile(r'[A-Za-z]+')
+    
     def find_dates_in_text(self, text):
         chunks = text.split(' ')
 
@@ -284,7 +287,7 @@ class DateMiner(object):
         return rdt
     
     def collapse_chars(self, text):
-        return re.sub('[\/\_\-\?\.\&=,]', ' ', text)
+        return self._re_collapse_chars.sub(' ', text)
 
     def coerce_dates_from_url(self, url):
         url = url.split('//', 1)[1]
@@ -310,7 +313,7 @@ class DateMiner(object):
                     is_month_token = True
 
             if not is_month_token:
-                chunk = re.sub(r'[A-Za-z]+', ' ', chunk)
+                chunk = self._re_alpha.sub(' ', chunk)
                 if not chunk.strip():
                     continue
 
