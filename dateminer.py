@@ -33,9 +33,9 @@ class Results(object):
         self.cur_year = date.today().year
     
     def __iter__(self):
-        scored = dict((k, sum(x.score for x in v)) for k, v in itertools.groupby(self.results, key=lambda x: x.date))
+        scored = ((k, sum(x.score for x in v)) for k, v in itertools.groupby(self.results, key=lambda x: x.date))
 
-        for d, s in sorted(scored.iteritems(), key=lambda x: x[1], reverse=True):
+        for d, s in sorted(scored, key=lambda x: x[1], reverse=True):
             yield d
     
     def __repr__(self):
@@ -74,7 +74,7 @@ class Guess(object):
     
     @property
     def score(self):
-        return sum(map(lambda x: int(bool(x)), [self.year, self.month, self.day]))
+        return sum(map(lambda x: bool(x), [self.year, self.month, self.day]))
 
     @property
     def date(self):
