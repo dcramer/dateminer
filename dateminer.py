@@ -13,14 +13,27 @@ Python port of John Muellerleile's dateminer Java library:
 
 
 from lxml import etree
-from datetime import datetime
+from datetime import date
 import itertools
 import re
 import sys
 
 def guess_date(url, content):
-    tu = DateMiner()
-    return tu.coerce_dates(url, content)
+    dateminer = DateMiner()
+    results = dateminer.coerce_dates(url, content)
+
+    if not results:
+        return
+
+    grouped_by_date = dict((k, len(list(v))) for k, v in itertools.groupby(results, key=lambda x: x))
+
+    # TODO: if multiple match same count then we should take the newest date
+    best = (0, None)
+    for dt, matches in grouped_by_date.items():
+        if best[0] < matches or (best[0] == matches and dt > best[1]):
+            best = (matches, dt)
+    
+    return best[1]
 
 class DateParser(object):
     def __init__(self, miner):
@@ -42,7 +55,7 @@ class DateMiner(object):
 
         results = []
 
-        dt = datetime.now()
+        dt = date.today()
 
         cur_year = dt.year
 
@@ -61,6 +74,7 @@ class DateMiner(object):
             if not chunk:
                 continue
             is_num = chunk.isdigit()
+
             if not is_num:
                 pos_month = None
                 if chunk_len == 3:
@@ -80,7 +94,7 @@ class DateMiner(object):
                         if not found_month:
                             pos_month = 1
 
-                        results.append(dt.replace(year=pos_year, month=pos_month, day=pos_day))
+                        results.append(date(year=pos_year, month=pos_month, day=pos_day))
 
                     found_year = False
                     found_month = False
@@ -142,7 +156,7 @@ class DateMiner(object):
 
                     # if we have month and day already and it's length 2,
                     # it's probably a shortened year... let's do the 2069 test
-                    if (found_month and found_day and chunk_len == 2):
+                    if not found_year and (found_month and found_day and chunk_len == 2):
                         if pos_v < 70:
                             if pos_v + 2000 <= cur_year:
                                 pos_year = 2000 + pos_v
@@ -197,7 +211,7 @@ class DateMiner(object):
                     pos_day = 0
                     tval = 0
                 elif found_year and found_month and found_day:
-                    results.append(dt.replace(year=pos_year, month=pos_month, day=pos_day))
+                    results.append(date(year=pos_year, month=pos_month, day=pos_day))
 
                     found_year = False
                     found_month = False
@@ -212,24 +226,23 @@ class DateMiner(object):
             if found_year and found_month and cur_chunk == num_chunks - 1:
                 if not found_day:
                     pos_day = 1
-                results.append(dt.replace(year=pos_year, month=pos_month, day=pos_day))
+                results.append(date(year=pos_year, month=pos_month, day=pos_day))
 
         if found_year:
             if not found_day:
                 pos_day = 1
             if not found_month:
                 pos_month = 1
-            results.append(dt.replace(year=pos_year, month=pos_month, day=pos_day))
+            results.append(date(year=pos_year, month=pos_month, day=pos_day))
 
         # sanity check
-        results = [r for r in results if r.year >= 1970 and r.year <= cur_year]
+        results = [r for r in results if r.year <= cur_year]
 
         return results
 
     def brute_force_date(self, string, valid):
-        dt = datetime.now()
         rdt = None
-        cur_year = dt.year
+        cur_year = date.today().year
 
         s1_1_4 = int(string[:4])
         s1_2_2 = int(string[4:6])
@@ -246,7 +259,7 @@ class DateMiner(object):
            s1_3_2 > 0 and
            s1_3_2 <= 31): #dd
 
-            rdt = dt.replace(year=s1_1_4, month=s1_2_2, day=s1_3_2)
+            rdt = date(year=s1_1_4, month=s1_2_2, day=s1_3_2)
 
         elif (s2_3_4 > 1900 and
              s2_3_4 < (cur_year + 1)):
@@ -258,7 +271,7 @@ class DateMiner(object):
                s2_2_2 > 0 and
                s2_2_2 <= 12):
 
-                rdt = dt.replace(year=s2_3_4, month=s2_2_2, day=s2_1_2)
+                rdt = date(year=s2_3_4, month=s2_2_2, day=s2_1_2)
 
             # mm dd yyyy?
             elif (s2_1_2 > 0 and
@@ -266,24 +279,29 @@ class DateMiner(object):
                  s2_2_2 > 0 and
                  s2_2_2 <= 31):
 
-                rdt = dt.replace(year=s2_3_4, month=s2_1_2, day=s2_2_2)
+                rdt = date(year=s2_3_4, month=s2_1_2, day=s2_2_2)
 
         return rdt
+    
+    def collapse_chars(self, text):
+        return re.sub('[\/\_\-\?\.\&=,]', ' ', text)
 
-    # tailored specifically to URLs, but not limited to :)
-    def coerce_dates_from_text(self, string):
-        collapse_chars = ['/', '_', '-', '?', '.', '&', '=', ',']
-
-        if string.startswith('http'):
-            string = string.replace('http://', '')
-            string = string.replace('https://', '')
-            string = string.split('/', 1)[1]
-
-        for char in collapse_chars:
-            string = string.replace(char, ' ')
+    def coerce_dates_from_url(self, url):
+        url = url.split('//', 1)[1]
+        try:
+            url = url.split('/', 1)[1]
+        except IndexError:
+            url = ''
+            
+        url = self.collapse_chars(url)
+        
+        return self.coerce_dates_from_text(url)
+        
+    def coerce_dates_from_text(self, text):
+        text = self.collapse_chars(text)
 
         out = ''
-        chunks = string.split(' ')
+        chunks = text.split(' ')
         for chunk in chunks:
             chunk = chunk.strip().lower()
             is_month_token = False
@@ -298,10 +316,13 @@ class DateMiner(object):
 
             out += chunk + " "
 
-        results = set(self.find_dates_in_text(string))
-        results.update(set(self.find_dates_in_text(out.strip())))
+        out = out.strip()
 
-        return results
+        results = set(self.find_dates_in_text(text))
+        if out != text:
+            results.update(set(self.find_dates_in_text(out)))
+
+        return list(results)
 
     def coerce_dates_from_html(self, content):
         dtparser = DateParser(miner=self)
@@ -311,7 +332,7 @@ class DateMiner(object):
         return dtparser.dates
 
     def coerce_dates(self, url, content):
-        dates_url = set(self.coerce_dates_from_text(url))
+        dates_url = set(self.coerce_dates_from_url(url))
         dates_content = set(self.coerce_dates_from_html(content))
 
         results = dates_url.intersection(dates_content)
@@ -327,14 +348,7 @@ class DateMiner(object):
 
         results = list(results)
 
-        if not results:
-            return
-
-        grouped_by_date = dict((k, len(list(v))) for k, v in itertools.groupby(results, key=lambda x: x.replace(hour=0, minute=0, second=0, microsecond=0)))
-
-        # TODO: if multiple match same count then we should take the newest date
-
-        return sorted(grouped_by_date.items(), key=lambda x: x[1], reverse=True)[0][0]
+        return results
 
 if __name__ == '__main__':
     import urllib2
