@@ -1,4 +1,4 @@
-# 
+#
 """
 dateminer
 ~~~~~~~~~
@@ -24,31 +24,34 @@ def guess_date(url, content):
 
     if not results:
         return
-    
-    return results[0]
+
+    return list(results.sorted())[0]
 
 class Results(object):
     def __init__(self):
         self.results = []
         self.cur_year = date.today().year
-    
-    def __iter__(self):
-        scored = ((k, sum(x.score for x in v)) for k, v in itertools.groupby(self.results, key=lambda x: x.date))
 
-        for d, s in sorted(scored, key=lambda x: x[1], reverse=True):
-            yield d
-    
+    def __iter__(self):
+        return iter(self.results)
+
     def __repr__(self):
         return '<%s: results=%s>' % (self.__class__.__name__, self.results)
 
     def __len__(self):
         return len(self.results)
-    
+
     def __getitem__(self, *args, **kwargs):
         return self.results.__getitem__(*args, **kwargs)
-    
+
     def __getslice__(self, *args, **kwargs):
         return self.results.__getslice__(*args, **kwargs)
+
+    def sorted(self):
+        scored = ((k, sum(x.score for x in v)) for k, v in itertools.groupby(self.results, key=lambda x: x.date))
+
+        for d, s in sorted(scored, key=lambda x: x[1], reverse=True):
+            yield d
 
     def add(self, guess):
         if not guess.year:
@@ -58,6 +61,9 @@ class Results(object):
         self.results.append(guess)
 
     def update(self, results):
+        if not results:
+            return
+
         if isinstance(results, Results):
             self.results.extend(results.results)
         else:
@@ -71,7 +77,7 @@ class Guess(object):
 
     def __repr__(self):
         return '<%s: date=%s, score=%s>' % (self.__class__.__name__, self.date, self.score)
-    
+
     @property
     def score(self):
         return sum(map(lambda x: bool(x), [self.year, self.month, self.day]))
@@ -110,7 +116,7 @@ class DateMiner(object):
 
     _re_collapse_chars = re.compile(r'[\/\_\-\?\.\&=,]')
     _re_alpha = re.compile(r'[A-Za-z]+')
-    
+
     def __init__(self):
         self.results = []
         self.cur_year = date.today().year
@@ -287,7 +293,7 @@ class DateMiner(object):
                 guess = Guess(year=s2_3_4, month=s2_1_2, day=s2_2_2)
 
         return guess
-    
+
     def collapse_chars(self, text):
         return self._re_collapse_chars.sub(' ', text)
 
@@ -297,11 +303,11 @@ class DateMiner(object):
             url = url.split('/', 1)[1]
         except IndexError:
             url = ''
-            
+
         url = self.collapse_chars(url)
-        
+
         return self.coerce_dates_from_text(url)
-        
+
     def coerce_dates_from_text(self, text):
         text = self.collapse_chars(text)
 
