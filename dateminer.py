@@ -365,5 +365,5 @@ if __name__ == '__main__':
         url = ' '.join(sys.argv[1:])
     content = urllib2.urlopen(url).read()
 
-    tu = DateMiner()
-    print tu.coerce_dates(url, content)
+    dateminer = DateMiner()
+    print dateminer.parse(url, content)
