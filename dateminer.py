@@ -28,8 +28,8 @@ def guess_date(url, content):
     return list(results.sorted())[0]
 
 class Results(object):
-    def __init__(self):
-        self.results = []
+    def __init__(self, results=None):
+        self.results = results or []
         self.cur_year = date.today().year
 
     def __iter__(self):
@@ -48,17 +48,17 @@ class Results(object):
         return self.results.__getslice__(*args, **kwargs)
 
     def sorted(self):
-        scored = ((k, sum(x.score for x in v)) for k, v in itertools.groupby(self.results, key=lambda x: x.date))
+        scored = ((k, sum(x[0].score for x in v)) for k, v in itertools.groupby(self.results, key=lambda x: x[0].date))
 
         for d, s in sorted(scored, key=lambda x: x[1], reverse=True):
             yield d
 
-    def add(self, guess):
+    def add(self, guess, where):
         if not guess.year:
             return
         if guess.year > self.cur_year:
             return
-        self.results.append(guess)
+        self.results.append((guess, where))
 
     def update(self, results):
         if not results:
@@ -78,6 +78,11 @@ class Guess(object):
     def __repr__(self):
         return '<%s: date=%s, score=%s>' % (self.__class__.__name__, self.date, self.score)
 
+    def __eq__(self, other):
+        if isinstance(other, Guess):
+            return self.year == other.year and self.month == other.month and self.day == other.day
+        raise ValueError
+
     @property
     def score(self):
         return sum(map(lambda x: bool(x), [self.year, self.month, self.day]))
@@ -87,17 +92,20 @@ class Guess(object):
         return date(year=self.year or date.today().year, month=self.month or 1, day=self.day or 1)
 
 class DateParser(object):
+    # we dont include script tags as some sites (cnn) dont seem to hardcode the date
+    useless_tags = ['style']
+
     def __init__(self, miner):
         self.miner = miner
         self.dates = []
         self.parse = True
 
     def start(self, tag, attr):
-        if tag in ('style', 'script', 'noscript'):
+        if tag in self.useless_tags:
             self.parse = False
 
     def end(self, tag):
-        if tag in ('style', 'script', 'noscript'):
+        if tag in self.useless_tags:
             self.parse = True
 
     def data(self, data):
@@ -121,7 +129,7 @@ class DateMiner(object):
         self.results = []
         self.cur_year = date.today().year
 
-    def find_dates_in_text(self, text):
+    def find_dates_in_text(self, text, where='text'):
         chunks = text.split(' ')
 
         guess = Guess()
@@ -150,7 +158,7 @@ class DateMiner(object):
                         pass
 
                 elif guess.year and guess.month:
-                    results.add(guess)
+                    results.add(guess, where)
                     guess = Guess()
 
             else:
@@ -187,7 +195,7 @@ class DateMiner(object):
                             # be something like this: /03/1114/ which usually
                             # [at this state] turns out to be: 11/14/2003
                             if guess.month:
-                                s4_2then4 = chunk + "20" + (guess.month < 10 and "0" or "") + guess.month
+                                s4_2then4 = '%s20%s%s' % (chunk, (guess.month < 10 and "0" or ""), guess.month)
                                 tval = self.brute_force_date(s4_2then4, 8)
                                 guess = Guess()
                 elif chunk_len in (1, 2):
@@ -234,20 +242,20 @@ class DateMiner(object):
                         tval = self.brute_force_date(chunk, 8)
 
                 if tval:
-                    results.add(tval)
+                    results.add(tval, where)
                     guess = Guess()
                 # elif guess.year:
-                #     results.add(guess)
+                #     results.add(guess, where)
                 #     guess = Guess()
 
             # last chance
             cur_chunk += 1
             if guess.year and guess.month and cur_chunk == num_chunks - 1:
-                results.add(guess)
+                results.add(guess, where)
                 guess = Guess()
 
         if guess.year:
-            results.add(guess)
+            results.add(guess, where)
             guess = Guess()
 
         return results
@@ -306,9 +314,9 @@ class DateMiner(object):
 
         url = self.collapse_chars(url)
 
-        return self.from_text(url)
+        return self.from_text(url, 'url')
 
-    def from_text(self, text):
+    def from_text(self, text, where='text'):
         text = self.collapse_chars(text)
 
         out = ''
@@ -326,9 +334,9 @@ class DateMiner(object):
 
         out = out.strip()
 
-        results = self.find_dates_in_text(text)
+        results = self.find_dates_in_text(text, where)
         if out != text:
-            results.update(self.find_dates_in_text(out))
+            results.update(self.find_dates_in_text(out, where))
 
         return results
 
@@ -336,11 +344,15 @@ class DateMiner(object):
         dtparser = DateParser(miner=self)
         parser = etree.HTMLParser(target=dtparser)
         parser.feed(content)
-        return parser.close()
+        return Results(parser.close())
 
     def parse(self, url, content):
         results = self.from_url(url)
-        results.update(self.from_html(content))
+        html_results = self.from_html(content)
+        # TODO: this should reweight any matches found in the content so that they're
+        # prioritized, and should happen in ``Results``
+        if not any(r in results for r in html_results):
+            results.update(html_results)
 
         return results
 
