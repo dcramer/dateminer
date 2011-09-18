@@ -20,7 +20,7 @@ import sys
 
 def guess_date(url, content):
     dateminer = DateMiner()
-    results = dateminer.coerce_dates(url, content)
+    results = dateminer.parse(url, content)
 
     if not results:
         return
@@ -102,7 +102,7 @@ class DateParser(object):
 
     def data(self, data):
         if self.parse:
-            self.dates.extend(self.miner.coerce_dates_from_text(data.strip()))
+            self.dates.extend(self.miner.from_text(data.strip()))
 
     def close(self):
         return self.dates
@@ -297,7 +297,7 @@ class DateMiner(object):
     def collapse_chars(self, text):
         return self._re_collapse_chars.sub(' ', text)
 
-    def coerce_dates_from_url(self, url):
+    def from_url(self, url):
         url = url.split('//', 1)[1]
         try:
             url = url.split('/', 1)[1]
@@ -306,9 +306,9 @@ class DateMiner(object):
 
         url = self.collapse_chars(url)
 
-        return self.coerce_dates_from_text(url)
+        return self.from_text(url)
 
-    def coerce_dates_from_text(self, text):
+    def from_text(self, text):
         text = self.collapse_chars(text)
 
         out = ''
@@ -332,15 +332,15 @@ class DateMiner(object):
 
         return results
 
-    def coerce_dates_from_html(self, content):
+    def from_html(self, content):
         dtparser = DateParser(miner=self)
         parser = etree.HTMLParser(target=dtparser)
         parser.feed(content)
         return parser.close()
 
-    def coerce_dates(self, url, content):
-        results = self.coerce_dates_from_url(url)
-        results.update(self.coerce_dates_from_html(content))
+    def parse(self, url, content):
+        results = self.from_url(url)
+        results.update(self.from_html(content))
 
         return results
 
