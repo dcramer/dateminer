@@ -8,7 +8,6 @@ setup(name='dateminer',
     maintainer='David Cramer',
     maintainer_email='dcramer@gmail.com',
     description='Extract dates from webpages',
-    version='0.1',
     url='http://github.com/dcramer/dateminer',
     license='Apache License 2.0',
     install_requires=[
