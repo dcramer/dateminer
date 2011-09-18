@@ -2,7 +2,7 @@ import os.path
 import unittest2
 import datetime
 
-from dateminer import DateMiner, guess_date
+from dateminer import DateMiner
 
 root = os.path.dirname(__file__)
 
@@ -16,11 +16,6 @@ TESTS = (
 )
 
 class DateMinerTest(unittest2.TestCase):
-    def assertDate(self, date1, date2, url, content):
-        message = "%s did not match date" % url
-
-        self.assertEquals(date1, date2, message)
-
     def test_from_url(self):
         dateminer = DateMiner()
 
@@ -38,7 +33,6 @@ class DateMinerTest(unittest2.TestCase):
         results = list(dateminer.from_url('http://www.latimes.com/news/nationworld/nation/la-na-texas-death-20110916,0,3367730.story').sorted())
         self.assertGreater(len(results), 0, results)
         self.assertEquals(results[0], datetime.date(year=2011, month=9, day=16))
-
 
     def test_from_html(self):
         dateminer = DateMiner()
