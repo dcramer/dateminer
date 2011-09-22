@@ -48,7 +48,7 @@ class Results(object):
         return self.results.__getslice__(*args, **kwargs)
 
     def sorted(self):
-        scored = ((k, sum(x[0].score for x in v)) for k, v in itertools.groupby(self.results, key=lambda x: x[0].date))
+        scored = ((k, sum(x.score for x in v)) for k, v in itertools.groupby(self.results, key=lambda x: x.date))
 
         for d, s in sorted(scored, key=lambda x: x[1], reverse=True):
             yield d
@@ -58,7 +58,7 @@ class Results(object):
             return
         if guess.year > self.cur_year:
             return
-        self.results.append((guess, where))
+        self.results.append(guess)
 
     def update(self, results):
         if not results:
@@ -351,7 +351,7 @@ class DateMiner(object):
         html_results = self.from_html(content)
         # TODO: this should reweight any matches found in the content so that they're
         # prioritized, and should happen in ``Results``
-        if not any(r in results for r in html_results):
+        if not (any(r.score >= 3 for r in results) or any(r in results for r in html_results)):
             results.update(html_results)
 
         return results
