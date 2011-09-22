@@ -2,7 +2,7 @@ import os.path
 from setuptools import setup, find_packages
 
 setup(name='dateminer',
-    version='0.1',
+    version='0.2',
     author='DISQUS',
     author_email='opensource@disqus.com',
     maintainer='David Cramer',
